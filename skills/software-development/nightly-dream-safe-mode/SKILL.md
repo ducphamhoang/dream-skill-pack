@@ -82,6 +82,22 @@ Accepted values:
 
 The script should read this config and stamp the chosen mode into the diary, candidate batch, and run payload.
 
+The same config file is also the right place for heuristic tuning, for example:
+
+```json
+{
+  "mode": "safe",
+  "heuristics": {
+    "top_topics_per_session": 4,
+    "top_groups_in_summary": 8,
+    "common_path_parts": [],
+    "project_context_markers": []
+  }
+}
+```
+
+Use `common_path_parts` to suppress extra generic directory names in your own environment, and `project_context_markers` to add local words that usually indicate a project/repo mention.
+
 Use a persistent JSON state file with at least:
 
 ```json

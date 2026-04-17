@@ -1,3 +1,9 @@
 {
-  "mode": "safe"
+  "mode": "safe",
+  "heuristics": {
+    "top_topics_per_session": 4,
+    "top_groups_in_summary": 8,
+    "common_path_parts": [],
+    "project_context_markers": []
+  }
 }

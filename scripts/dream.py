@@ -5,7 +5,7 @@ import json
 import os
 import re
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +26,10 @@ CONFIG_PATH = DREAM_DIR / "config.json"
 SYSTEM_ROLES = {"system", "developer"}
 SKIP_ASSISTANT_EMPTY = True
 MAX_MESSAGE_RENDER = 18
-TOP_TOPICS_PER_SESSION = 4
-TOP_GROUPS_IN_SUMMARY = 8
+DEFAULT_TOP_TOPICS_PER_SESSION = 4
+DEFAULT_TOP_GROUPS_IN_SUMMARY = 8
+TOP_TOPICS_PER_SESSION = DEFAULT_TOP_TOPICS_PER_SESSION
+TOP_GROUPS_IN_SUMMARY = DEFAULT_TOP_GROUPS_IN_SUMMARY
 
 REPO_PATTERNS = [
     re.compile(r"\b[a-z0-9]+(?:[-_][a-z0-9]+){1,}\b", re.I),
@@ -48,36 +50,86 @@ TOPIC_RULES: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
-KNOWN_PROJECT_HINTS = [
-    "py-hbs-ads",
-    "hbs-ads",
-    "hermes-agent",
-    "mygame_ads",
-    "video-library",
-    "video-workspace",
-]
-
-GENERIC_LABELS = {
-    "built-in",
-    "long-term",
-    "report-only",
-    "safe-mode",
-    "real-mode",
-    "always-on",
-    "query-driven",
-    "one-off",
-    "tool-system",
-    "type-layer-reason",
-    "low-confidence",
-    "backfill-ready",
-    "backfill-friendly",
-    "pending-review",
-    "promotion-status",
+DEFAULT_COMMON_PATH_PARTS = {
+    ".git",
+    ".hermes",
+    "agent",
+    "app",
+    "apps",
+    "asset",
+    "assets",
+    "bin",
+    "build",
+    "candidate",
+    "candidates",
+    "config",
+    "configs",
+    "data",
+    "diary",
+    "doc",
+    "docs",
+    "file",
+    "files",
+    "home",
+    "lib",
+    "module",
+    "modules",
+    "package",
+    "packages",
+    "pkg",
+    "repo",
+    "repos",
+    "run",
+    "runs",
+    "script",
+    "scripts",
+    "service",
+    "services",
+    "skill",
+    "skills",
+    "src",
+    "state",
+    "states",
+    "template",
+    "templates",
+    "test",
+    "tests",
+    "tmp",
+    "tool",
+    "tools",
+    "ubuntu",
+    "user",
+    "users",
+    "workspace",
+    "workspaces",
 }
+
+DEFAULT_PROJECT_CONTEXT_MARKERS = (
+    "repo",
+    "repository",
+    "project",
+    "workspace",
+    "package",
+    "module",
+    "service",
+    "folder",
+    "directory",
+    "codebase",
+    "github",
+    "git",
+    "~/",
+    "/",
+    ".py",
+    ".md",
+    ".json",
+)
+
+COMMON_PATH_PARTS = set(DEFAULT_COMMON_PATH_PARTS)
+PROJECT_CONTEXT_MARKERS = tuple(DEFAULT_PROJECT_CONTEXT_MARKERS)
 
 
 def utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def parse_iso(text: str | None) -> datetime | None:
@@ -120,6 +172,59 @@ def load_dream_mode() -> str:
     if mode not in {"safe", "real"}:
         return "safe"
     return mode
+
+
+
+def _clean_str_list(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        item = value.strip()
+        if not item:
+            continue
+        if item not in seen:
+            cleaned.append(item)
+            seen.add(item)
+    return cleaned
+
+
+
+def load_heuristic_config() -> dict[str, Any]:
+    global TOP_TOPICS_PER_SESSION, TOP_GROUPS_IN_SUMMARY, COMMON_PATH_PARTS, PROJECT_CONTEXT_MARKERS
+
+    config = load_json(CONFIG_PATH, {"mode": "safe"})
+    heuristics = config.get("heuristics") if isinstance(config, dict) else {}
+    if not isinstance(heuristics, dict):
+        heuristics = {}
+
+    top_topics = heuristics.get("top_topics_per_session", DEFAULT_TOP_TOPICS_PER_SESSION)
+    top_groups = heuristics.get("top_groups_in_summary", DEFAULT_TOP_GROUPS_IN_SUMMARY)
+    try:
+        TOP_TOPICS_PER_SESSION = max(1, int(top_topics))
+    except Exception:
+        TOP_TOPICS_PER_SESSION = DEFAULT_TOP_TOPICS_PER_SESSION
+    try:
+        TOP_GROUPS_IN_SUMMARY = max(1, int(top_groups))
+    except Exception:
+        TOP_GROUPS_IN_SUMMARY = DEFAULT_TOP_GROUPS_IN_SUMMARY
+
+    extra_path_parts = {item.lower() for item in _clean_str_list(heuristics.get("common_path_parts"))}
+    COMMON_PATH_PARTS = set(DEFAULT_COMMON_PATH_PARTS) | extra_path_parts
+
+    extra_markers = tuple(item.lower() for item in _clean_str_list(heuristics.get("project_context_markers")))
+    PROJECT_CONTEXT_MARKERS = tuple(dict.fromkeys((*DEFAULT_PROJECT_CONTEXT_MARKERS, *extra_markers)))
+
+    return {
+        "top_topics_per_session": TOP_TOPICS_PER_SESSION,
+        "top_groups_in_summary": TOP_GROUPS_IN_SUMMARY,
+        "common_path_parts": sorted(COMMON_PATH_PARTS),
+        "project_context_markers": list(PROJECT_CONTEXT_MARKERS),
+    }
+
 
 
 def list_session_files() -> list[Path]:
@@ -191,11 +296,13 @@ def normalize_label(text: str) -> str:
         if parts:
             text = "/".join(parts[-2:]) if len(parts) >= 2 else parts[-1]
     lowered = text.lower()
-    if lowered in GENERIC_LABELS:
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", lowered):
+        return ""
+    if re.fullmatch(r"\d{3}-\d{3}-\d{4}", lowered):
         return ""
     if lowered in {"memory", "skills", "dream", "diary", "cron", "docs", "video", "testing", "tools", "discord", "notion"}:
         return lowered
-    if re.fullmatch(r'[\\/",.:;`\-\s]+', text):
+    if re.fullmatch(r'[\\/\",.:;`\-\s]+', text):
         return ""
     if "/" in text and not re.search(r"[A-Za-z0-9]", text.replace("/", "")):
         return ""
@@ -207,17 +314,45 @@ def normalize_label(text: str) -> str:
 
 
 
+def looks_like_project_token(token: str) -> bool:
+    lowered = token.lower()
+    if "/" in lowered or "." in lowered or len(lowered) < 4:
+        return False
+    parts = [part for part in re.split(r"[-_]", lowered) if part]
+    if len(parts) < 2:
+        return False
+    if all(len(part) <= 3 for part in parts):
+        return False
+    return True
+
+
+
+def has_project_context(text: str, start: int, end: int) -> bool:
+    window = text[max(0, start - 40): min(len(text), end + 40)].lower()
+    return "`" in window or any(marker in window for marker in PROJECT_CONTEXT_MARKERS)
+
+
+
+def derive_project_candidates(path_label: str) -> list[str]:
+    parts = [part for part in path_label.split("/") if part]
+    if parts and "." in parts[-1]:
+        parts = parts[:-1]
+    for part in reversed(parts):
+        lowered = part.lower().strip()
+        if not lowered or lowered in COMMON_PATH_PARTS:
+            continue
+        candidate = normalize_label(lowered)
+        if not candidate or "/" in candidate or "." in candidate or len(candidate) < 4:
+            continue
+        return [candidate.lower()]
+    return []
+
+
+
 def infer_labels(texts: list[str]) -> dict[str, list[str]]:
     repo_hits: Counter[str] = Counter()
     topic_hits: Counter[str] = Counter()
     path_hits: Counter[str] = Counter()
-
-    joined = "\n".join(t for t in texts if t)
-    lower_joined = joined.lower()
-
-    for hint in KNOWN_PROJECT_HINTS:
-        if hint in lower_joined:
-            repo_hits[hint] += 4
 
     for text in texts:
         lowered = text.lower()
@@ -226,13 +361,15 @@ def infer_labels(texts: list[str]) -> dict[str, list[str]]:
                 topic_hits[topic] += 1
 
         for pattern in REPO_PATTERNS:
-            for match in pattern.findall(text):
-                label = normalize_label(match)
+            for match in pattern.finditer(text):
+                label = normalize_label(match.group(0))
                 if not label:
                     continue
                 if "/" in label or label.endswith(".py") or label.endswith(".md"):
                     path_hits[label] += 1
-                elif "-" in label:
+                    for candidate in derive_project_candidates(label):
+                        repo_hits[candidate] += 2
+                elif looks_like_project_token(label) and has_project_context(text, match.start(), match.end()):
                     repo_hits[label.lower()] += 1
 
     project_candidates = [name for name, _ in repo_hits.most_common(TOP_TOPICS_PER_SESSION)]
@@ -240,8 +377,6 @@ def infer_labels(texts: list[str]) -> dict[str, list[str]]:
     topic_candidates = [name for name, _ in topic_hits.most_common(TOP_TOPICS_PER_SESSION)]
 
     primary = project_candidates[0] if project_candidates else (topic_candidates[0] if topic_candidates else "general")
-    if primary in GENERIC_LABELS:
-        primary = topic_candidates[0] if topic_candidates else "general"
 
     labels = []
     seen = set()
@@ -458,6 +593,7 @@ def build_diary_markdown(dream_mode: str, diary_date: str, run_at: datetime, ses
 def main() -> None:
     run_at = utcnow()
     dream_mode = load_dream_mode()
+    heuristic_config = load_heuristic_config()
     diary_date = pick_diary_date(run_at)
 
     DIARY_DIR.mkdir(parents=True, exist_ok=True)
@@ -493,6 +629,7 @@ def main() -> None:
         "state_path": str(STATE_PATH),
         "candidate_batch_path": str(candidate_batch_path),
         "new_session_count": len(session_rows),
+        "heuristics": heuristic_config,
         "groups": [
             {
                 "name": name,

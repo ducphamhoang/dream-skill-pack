@@ -14,6 +14,7 @@
     "Hermes-compatible skills directory layout with SKILL.md files",
     "dream.py expects HERMES_HOME and reads ~/.hermes/sessions/session_*.json relative to that home",
     "Dream mode is controlled by ~/.hermes/dream/config.json",
+    "dream/config.json may also carry heuristic tuning under heuristics for label inference in different environments",
     "External memory promotion in real mode assumes fact_store/fact_feedback are available when Holographic is enabled"
   ],
   "install_notes": [
@@ -22,6 +23,7 @@
     "Copy the two skill folders into the target agent's skills tree, or expose them via skills.external_dirs on Hermes",
     "Copy scripts/dream.py into the target agent's scripts directory and schedule cron with script=dream.py",
     "Initialize ~/.hermes/dream/config.json and ~/.hermes/dream/state.json from the provided templates",
+    "Adjust dream/config.json -> heuristics if the target environment needs extra generic path suppression or project-context markers",
     "If using another framework, treat the SKILL.md files as prompts/playbooks and adapt dream.py to that framework's storage + scheduler model"
   ]
 }

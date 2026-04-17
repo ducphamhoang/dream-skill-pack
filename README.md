@@ -2,6 +2,8 @@
 
 This bundle packages the minimum reusable assets needed to move the current Dream workflow to another agent/runtime.
 
+The pack now treats labeling heuristics as runtime configuration, not hardcoded repo names. Tune them in `dream/config.json` under `heuristics` if a target environment needs extra path-part suppression or custom project-context markers.
+
 ## Included
 - `skills/software-development/nightly-dream-safe-mode/SKILL.md`
 - `skills/software-development/memory-capture-layering/SKILL.md`
@@ -44,6 +46,7 @@ Installer behavior:
 3. Bootstraps:
    - `<HERMES_HOME>/dream/config.json`
    - `<HERMES_HOME>/dream/state.json`
+   - including heuristic knobs under `dream/config.json -> heuristics` for environment-specific label tuning
 4. Leaves cron creation/update as an explicit operator step
 
 Useful flags:
