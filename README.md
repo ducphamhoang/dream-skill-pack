@@ -7,6 +7,7 @@ The pack now treats labeling heuristics as runtime configuration, not hardcoded 
 ## Included
 - `skills/software-development/nightly-dream-safe-mode/SKILL.md`
 - `skills/software-development/memory-capture-layering/SKILL.md`
+- `skills/software-development/dream-promoter-instructions/SKILL.md`
 - `scripts/dream.py`
 - `config-templates/dream.config.json`
 - `state-templates/dream.state.json`
@@ -41,13 +42,20 @@ python3 install.py --hermes-home ~/.hermes --mode real --print-cron-hint
 ```
 
 Installer behavior:
-1. Copies both skill directories into `<HERMES_HOME>/skills/software-development/`
+1. Copies three skill directories into `<HERMES_HOME>/skills/software-development/`
 2. Copies `scripts/dream.py` into `<HERMES_HOME>/scripts/dream.py`
 3. Bootstraps:
    - `<HERMES_HOME>/dream/config.json`
    - `<HERMES_HOME>/dream/state.json`
    - including heuristic knobs under `dream/config.json -> heuristics` for environment-specific label tuning
 4. Leaves cron creation/update as an explicit operator step
+
+## Working architecture from now on
+- `dream.py` = staging only
+- `memory-capture-layering` = classification policy
+- `dream-promoter-instructions` = runtime-specific execution playbook
+
+In Hermes, the real-mode cron run should load both `memory-capture-layering` and `dream-promoter-instructions`.
 
 Useful flags:
 - `--mode safe|real` -> initializes `dream/config.json`
@@ -60,7 +68,7 @@ Manual install remains possible too:
 3. Create the target dream runtime files:
    - `~/.hermes/dream/config.json` from `config-templates/dream.config.json`
    - `~/.hermes/dream/state.json` from `state-templates/dream.state.json`
-4. Create or update the cron job to use `script=dream.py` and load `memory-capture-layering`.
+4. Create or update the cron job to use `script=dream.py` and load both `memory-capture-layering` and `dream-promoter-instructions`.
 5. If real mode should write external facts, ensure the target runtime has an external memory provider configured and exposes `fact_store`.
 
 ## Install into a non-Hermes agent

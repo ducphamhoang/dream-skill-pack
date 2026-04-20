@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [cron, memory, diary, consolidation, safe-mode, session-logs]
-    related_skills: [memory-capture-layering, hermes-agent]
+    related_skills: [memory-capture-layering, dream-promoter-instructions, hermes-agent]
 ---
 
 # Nightly Dream Modes
@@ -36,7 +36,7 @@ Split the workflow into two layers:
 
 2. **Cron-run agent prompt**
    - Treats the script output as the only input corpus for this run
-   - Uses `memory-capture-layering` taxonomy
+   - Uses `memory-capture-layering` for classification and `dream-promoter-instructions` for runtime-specific execution
    - Produces a nightly report with four buckets:
      - proposed built-in memory
      - proposed skill actions
@@ -81,6 +81,22 @@ Accepted values:
 - `real` -> diary + run payload + candidate batch + conservative promotion of approved durable knowledge
 
 The script should read this config and stamp the chosen mode into the diary, candidate batch, and run payload.
+
+A practical config shape is:
+
+```json
+{
+  "mode": "real",
+  "promotion": {
+    "adapter": "hermes",
+    "built_in": "auto_on_real",
+    "skills": "auto_on_real",
+    "external": "auto_on_real"
+  }
+}
+```
+
+Use `promotion.adapter` to select the runtime-specific execution playbook. Keep promotion outcomes in the candidate batch/state files, not in config.
 
 The same config file is also the right place for heuristic tuning, for example:
 
@@ -234,11 +250,13 @@ The cron prompt must explicitly say:
 The cron prompt must explicitly say:
 - real mode is active,
 - treat the script output as the only input corpus,
+- use `memory-capture-layering` to decide where knowledge belongs,
+- use `dream-promoter-instructions` to decide how this runtime should apply approved writes,
 - do not regenerate the diary or re-scan raw sessions,
 - promote only high-confidence durable knowledge,
 - write built-in memory only when it is compact and always useful,
 - patch/create skills only when there is a verified reusable procedure gap,
-- write external facts via `fact_store` for query-driven durable project knowledge,
+- write external facts via the runtime's supported deep-memory interface,
 - and update candidate-batch / state promotion metadata after successful writes.
 
 ## Output structure for the cron-run agent

@@ -1,5 +1,11 @@
 {
   "mode": "safe",
+  "promotion": {
+    "adapter": "hermes",
+    "built_in": "manual",
+    "skills": "manual",
+    "external": "manual"
+  },
   "heuristics": {
     "top_topics_per_session": 4,
     "top_groups_in_summary": 8,

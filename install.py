@@ -47,6 +47,7 @@ def main() -> int:
     src_skill_root = pack_root / "skills" / "software-development"
     src_dream_skill = src_skill_root / "nightly-dream-safe-mode"
     src_memory_skill = src_skill_root / "memory-capture-layering"
+    src_promoter_skill = src_skill_root / "dream-promoter-instructions"
     src_script = pack_root / "scripts" / "dream.py"
     src_config = pack_root / "config-templates" / "dream.config.json"
     src_state = pack_root / "state-templates" / "dream.state.json"
@@ -54,11 +55,12 @@ def main() -> int:
     dst_skill_root = hermes_home / "skills" / "software-development"
     dst_dream_skill = dst_skill_root / "nightly-dream-safe-mode"
     dst_memory_skill = dst_skill_root / "memory-capture-layering"
+    dst_promoter_skill = dst_skill_root / "dream-promoter-instructions"
     dst_script = hermes_home / "scripts" / "dream.py"
     dst_config = hermes_home / "dream" / "config.json"
     dst_state = hermes_home / "dream" / "state.json"
 
-    for required in [src_dream_skill / "SKILL.md", src_memory_skill / "SKILL.md", src_script, src_config, src_state]:
+    for required in [src_dream_skill / "SKILL.md", src_memory_skill / "SKILL.md", src_promoter_skill / "SKILL.md", src_script, src_config, src_state]:
         if not required.exists():
             raise FileNotFoundError(f"Missing bundle asset: {required}")
 
@@ -68,13 +70,14 @@ def main() -> int:
 
     copy_tree(src_dream_skill, dst_dream_skill, force=args.force)
     copy_tree(src_memory_skill, dst_memory_skill, force=args.force)
+    copy_tree(src_promoter_skill, dst_promoter_skill, force=args.force)
     copy_file(src_script, dst_script, force=args.force)
     write_json(src_config, dst_config, force=args.force, mode_override=args.mode)
     write_json(src_state, dst_state, force=args.force)
 
     result = {
         "installed_to": str(hermes_home),
-        "skills": [str(dst_dream_skill), str(dst_memory_skill)],
+        "skills": [str(dst_dream_skill), str(dst_memory_skill), str(dst_promoter_skill)],
         "script": str(dst_script),
         "dream_config": str(dst_config),
         "dream_state": str(dst_state),
@@ -85,7 +88,7 @@ def main() -> int:
     if args.print_cron_hint:
         print("\nNext steps:")
         print("- Ensure the target Hermes config has any desired external memory provider enabled.")
-        print("- Recreate/update the cron job so it uses script=dream.py and loads memory-capture-layering.")
+        print("- Recreate/update the cron job so it uses script=dream.py and loads memory-capture-layering + dream-promoter-instructions.")
         print("- Run the script once manually to verify diary/run/candidate output before the first scheduled run.")
 
     return 0

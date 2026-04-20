@@ -4,6 +4,7 @@
   "includes": [
     "skills/software-development/nightly-dream-safe-mode/SKILL.md",
     "skills/software-development/memory-capture-layering/SKILL.md",
+    "skills/software-development/dream-promoter-instructions/SKILL.md",
     "scripts/dream.py",
     "config-templates/dream.config.json",
     "state-templates/dream.state.json",
@@ -15,13 +16,14 @@
     "dream.py expects HERMES_HOME and reads ~/.hermes/sessions/session_*.json relative to that home",
     "Dream mode is controlled by ~/.hermes/dream/config.json",
     "dream/config.json may also carry heuristic tuning under heuristics for label inference in different environments",
-    "External memory promotion in real mode assumes fact_store/fact_feedback are available when Holographic is enabled"
+    "External memory promotion in real mode assumes fact_store/fact_feedback are available when Holographic is enabled",
+    "Promotion execution is runtime-specific and should follow dream-promoter-instructions for the selected adapter"
   ],
   "install_notes": [
     "Run ./install.sh --hermes-home <target_hermes_home> --mode safe|real to install the pack into a Hermes runtime",
     "Use --force if reinstalling over an existing dream-skill-pack deployment",
-    "Copy the two skill folders into the target agent's skills tree, or expose them via skills.external_dirs on Hermes",
-    "Copy scripts/dream.py into the target agent's scripts directory and schedule cron with script=dream.py",
+    "Copy the three skill folders into the target agent's skills tree, or expose them via skills.external_dirs on Hermes.",
+    "Copy scripts/dream.py into the target agent's scripts directory and schedule cron with script=dream.py while loading memory-capture-layering + dream-promoter-instructions.",
     "Initialize ~/.hermes/dream/config.json and ~/.hermes/dream/state.json from the provided templates",
     "Adjust dream/config.json -> heuristics if the target environment needs extra generic path suppression or project-context markers",
     "If using another framework, treat the SKILL.md files as prompts/playbooks and adapt dream.py to that framework's storage + scheduler model"

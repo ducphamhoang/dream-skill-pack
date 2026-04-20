@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [memory, skills, taxonomy, knowledge-management, triage]
-    related_skills: [hermes-agent, orchestration-docs-layering]
+    related_skills: [dream-promoter-instructions, hermes-agent, orchestration-docs-layering]
 ---
 
 # Memory Capture Layering
@@ -22,6 +22,8 @@ Use this skill whenever you are about to save durable knowledge and must decide 
 - **Nowhere** for temporary noise, task progress, or low-confidence observations
 
 The goal is not to save more information. The goal is to save the **right kind of information in the right layer** so retrieval stays accurate as projects and workflows scale.
+
+Important: this skill handles **classification**, not runtime-specific execution. Pair it with `dream-promoter-instructions` when a system must actually apply approved writes.
 
 ## Core Model
 
