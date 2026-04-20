@@ -31,6 +31,8 @@ DEFAULT_TOP_GROUPS_IN_SUMMARY = 8
 TOP_TOPICS_PER_SESSION = DEFAULT_TOP_TOPICS_PER_SESSION
 TOP_GROUPS_IN_SUMMARY = DEFAULT_TOP_GROUPS_IN_SUMMARY
 
+AUTO_SKILL_REVIEW_PROMPT_PREFIX = "Review the conversation above and consider saving or updating a skill if appropriate."
+
 REPO_PATTERNS = [
     re.compile(r"\b[a-z0-9]+(?:[-_][a-z0-9]+){1,}\b", re.I),
     re.compile(r"(?:(?:~|/)[^\s`]+)+"),
@@ -236,6 +238,19 @@ def list_session_files() -> list[Path]:
 def clean_text(value: Any) -> str:
     if isinstance(value, str):
         text = value
+    elif isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                if item.get("type") == "text" and item.get("text"):
+                    parts.append(str(item.get("text")))
+                elif item.get("content"):
+                    parts.append(str(item.get("content")))
+            elif item is not None:
+                parts.append(str(item))
+        text = "\n".join(part for part in parts if part).strip()
+        if not text:
+            text = json.dumps(value, ensure_ascii=False)
     else:
         text = json.dumps(value, ensure_ascii=False)
     text = text.replace("\r", " ")
@@ -283,6 +298,39 @@ def message_keep(msg: dict[str, Any]) -> bool:
         if SKIP_ASSISTANT_EMPTY and not content:
             return False
     return True
+
+
+def is_auto_skill_review_prompt(text: str) -> bool:
+    return text.startswith(AUTO_SKILL_REVIEW_PROMPT_PREFIX)
+
+
+def strip_meta_skill_review_turns(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop auto-generated end-of-session skill-review prompts and their direct assistant replies.
+
+    These review turns are bookkeeping scaffolding, not substantive conversation content.
+    If kept, dream may misclassify them as fresh work and attempt unsafe skill patches.
+    """
+    cleaned: list[dict[str, Any]] = []
+    skip_next_assistant = False
+
+    for msg in messages:
+        role = msg.get("role", "")
+        text = clean_text(msg.get("content", ""))
+
+        if role == "user" and is_auto_skill_review_prompt(text):
+            skip_next_assistant = True
+            continue
+
+        if skip_next_assistant and role == "assistant":
+            skip_next_assistant = False
+            continue
+
+        if role == "user":
+            skip_next_assistant = False
+
+        cleaned.append(msg)
+
+    return cleaned
 
 
 def normalize_label(text: str) -> str:
@@ -399,6 +447,9 @@ def extract_incremental_session(path: Path, state: dict[str, Any]) -> dict[str, 
     if not isinstance(raw, dict):
         return None
     session_id = raw.get("session_id") or path.stem.replace("session_", "")
+    platform = raw.get("platform") or "unknown"
+    if platform == "cron":
+        return None
     messages = raw.get("messages") or []
     if not isinstance(messages, list):
         return None
@@ -407,6 +458,7 @@ def extract_incremental_session(path: Path, state: dict[str, Any]) -> dict[str, 
     processed_count = int(processed.get("processed_message_count", 0) or 0)
     new_messages = messages[processed_count:]
     kept = [m for m in new_messages if isinstance(m, dict) and message_keep(m)]
+    kept = strip_meta_skill_review_turns(kept)
 
     session_start = parse_iso(raw.get("session_start"))
     last_updated = parse_iso(raw.get("last_updated"))
@@ -415,11 +467,12 @@ def extract_incremental_session(path: Path, state: dict[str, Any]) -> dict[str, 
 
     return {
         "session_id": session_id,
-        "platform": raw.get("platform") or "unknown",
+        "platform": platform,
         "model": raw.get("model") or "unknown",
         "session_start": session_start.isoformat() if session_start else None,
         "last_updated": last_updated.isoformat() if last_updated else None,
         "message_count_total": len(messages),
+        "new_message_count_raw": len(new_messages),
         "new_message_count": len(kept),
         "preview": session_preview(messages),
         "messages": kept,
@@ -603,11 +656,15 @@ def main() -> None:
     state = load_state()
     session_files = list_session_files()
     session_rows: list[dict[str, Any]] = []
+    processed_rows: list[dict[str, Any]] = []
 
     for path in session_files:
         row = extract_incremental_session(path, state)
         if not row:
             continue
+        if row["new_message_count_raw"] <= 0:
+            continue
+        processed_rows.append(row)
         if row["new_message_count"] <= 0:
             continue
         session_rows.append(row)
@@ -674,7 +731,7 @@ def main() -> None:
     save_json(run_path, run_payload)
 
     sessions_state = state.setdefault("sessions", {})
-    for row in session_rows:
+    for row in processed_rows:
         sessions_state[row["session_id"]] = {
             "processed_message_count": row["message_count_total"],
             "last_seen_updated": row.get("last_updated"),
