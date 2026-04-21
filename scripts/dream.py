@@ -168,12 +168,35 @@ def load_state() -> dict[str, Any]:
     )
 
 
-def load_dream_mode() -> str:
+def load_dream_config() -> dict[str, Any]:
     config = load_json(CONFIG_PATH, {"mode": "safe"})
+    if not isinstance(config, dict):
+        config = {"mode": "safe"}
+    promotion = config.get("promotion")
+    if not isinstance(promotion, dict):
+        promotion = {}
+    config["promotion"] = promotion
+    return config
+
+
+def load_dream_mode() -> str:
+    config = load_dream_config()
     mode = str(config.get("mode", "safe")).strip().lower()
     if mode not in {"safe", "real"}:
         return "safe"
     return mode
+
+
+def snapshot_promotion_policy(config: dict[str, Any]) -> dict[str, str]:
+    promotion = config.get("promotion") if isinstance(config, dict) else {}
+    if not isinstance(promotion, dict):
+        promotion = {}
+    return {
+        "adapter": str(promotion.get("adapter", "hermes") or "hermes").strip().lower() or "hermes",
+        "built_in": str(promotion.get("built_in", "manual") or "manual").strip().lower() or "manual",
+        "skills": str(promotion.get("skills", "manual") or "manual").strip().lower() or "manual",
+        "external": str(promotion.get("external", "manual") or "manual").strip().lower() or "manual",
+    }
 
 
 
@@ -508,19 +531,22 @@ def summarize_groups(sessions: list[dict[str, Any]]) -> list[tuple[str, list[dic
     return ordered
 
 
-def build_candidate_batch(dream_mode: str, run_at: datetime, diary_date: str, sessions: list[dict[str, Any]], diary_path: Path) -> dict[str, Any]:
+def build_candidate_batch(config: dict[str, Any], dream_mode: str, run_at: datetime, diary_date: str, sessions: list[dict[str, Any]], diary_path: Path) -> dict[str, Any]:
     grouped = summarize_groups(sessions)
+    promotion_policy = snapshot_promotion_policy(config)
     return {
+        "schema_version": "2.0",
         "status": "pending_review",
         "mode": dream_mode,
         "created_at": run_at.isoformat() + "Z",
         "diary_date": diary_date,
         "diary_path": str(diary_path),
         "candidate_count": len(sessions),
+        "promotion_policy": promotion_policy,
         "promotion_status": {
-            "built_in": "not_applied",
-            "skills": "not_applied",
-            "external": "not_applied",
+            "built_in": "not_evaluated",
+            "skills": "not_evaluated",
+            "external": "not_evaluated",
         },
         "backfill_ready": True,
         "groups": [
@@ -644,16 +670,17 @@ def build_diary_markdown(dream_mode: str, diary_date: str, run_at: datetime, ses
 
 
 def main() -> None:
-    run_at = utcnow()
+    state = load_state()
+    dream_config = load_dream_config()
     dream_mode = load_dream_mode()
     heuristic_config = load_heuristic_config()
+    promotion_policy = snapshot_promotion_policy(dream_config)
+    run_at = utcnow()
     diary_date = pick_diary_date(run_at)
 
     DIARY_DIR.mkdir(parents=True, exist_ok=True)
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     CANDIDATES_DIR.mkdir(parents=True, exist_ok=True)
-
-    state = load_state()
     session_files = list_session_files()
     session_rows: list[dict[str, Any]] = []
     processed_rows: list[dict[str, Any]] = []
@@ -674,13 +701,15 @@ def main() -> None:
     diary_path.write_text(diary_markdown, encoding="utf-8")
 
     grouped = summarize_groups(session_rows)
-    candidate_batch = build_candidate_batch(dream_mode, run_at, diary_date, session_rows, diary_path)
+    candidate_batch = build_candidate_batch(dream_config, dream_mode, run_at, diary_date, session_rows, diary_path)
     candidate_batch_path = CANDIDATES_DIR / f"candidate_batch_{run_at.strftime('%Y%m%dT%H%M%SZ')}.json"
     save_json(candidate_batch_path, candidate_batch)
 
     run_payload = {
+        "schema_version": "2.0",
         "mode": dream_mode,
         "run_at": run_at.isoformat() + "Z",
+        "promotion_policy": promotion_policy,
         "diary_date": diary_date,
         "diary_path": str(diary_path),
         "state_path": str(STATE_PATH),
@@ -746,13 +775,17 @@ def main() -> None:
             "path": str(candidate_batch_path),
             "candidate_count": len(session_rows),
             "status": candidate_batch["status"],
+            "promotion_policy": promotion_policy,
+            "promotion_status": candidate_batch["promotion_status"],
         }
     )
     state["candidate_batches"] = state["candidate_batches"][-50:]
     save_json(STATE_PATH, state)
 
     output = {
+        "schema_version": "2.0",
         "dream_mode": dream_mode,
+        "promotion_policy": promotion_policy,
         "diary_date": diary_date,
         "diary_path": str(diary_path),
         "run_path": str(run_path),
