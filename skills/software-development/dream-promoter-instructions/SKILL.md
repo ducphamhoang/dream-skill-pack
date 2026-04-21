@@ -83,6 +83,14 @@ If the config is missing, default conservatively:
    - `promotion_status.built_in`
    - `promotion_status.skills`
    - `promotion_status.external`
+   - prefer explicit lifecycle states:
+     - `not_evaluated` for initial staged state before review
+     - `applied` when the write succeeds
+     - `not_applied` when review is complete but promotion is intentionally skipped (duplicate, temporary, low-confidence, below threshold)
+     - `manual_review` when likely durable but not auto-promoted yet
+     - `disabled` when policy forbids the layer
+     - `blocked_memory_unavailable` / `blocked_tool_unavailable` when runtime capability is missing
+     - `failed` when a write was attempted but errored unexpectedly
 6. Record any identifiers/notes useful for audit (fact IDs, skill names, memory note summary).
 
 ## Adapter references
