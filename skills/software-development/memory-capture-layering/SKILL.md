@@ -202,7 +202,7 @@ When in doubt, prefer **not saving** over saving low-quality memory.
 
 ### Skill
 - “How to run a reusable py-hbs-ads video workflow.”
-- “How to orchestrate bounded standalone Qwen workers.”
+- “How to orchestrate bounded helper workers for narrow tasks.”
 - “How to classify new durable knowledge into built-in vs skill vs external provider.”
 
 ### External provider

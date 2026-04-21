@@ -98,22 +98,6 @@ A practical config shape is:
 
 Use `promotion.adapter` to select the runtime-specific execution playbook. Keep promotion outcomes in the candidate batch/state files, not in config.
 
-The same config file is also the right place for heuristic tuning, for example:
-
-```json
-{
-  "mode": "safe",
-  "heuristics": {
-    "top_topics_per_session": 4,
-    "top_groups_in_summary": 8,
-    "common_path_parts": [],
-    "project_context_markers": []
-  }
-}
-```
-
-Use `common_path_parts` to suppress extra generic directory names in your own environment, and `project_context_markers` to add local words that usually indicate a project/repo mention.
-
 Use a persistent JSON state file with at least:
 
 ```json
@@ -140,6 +124,10 @@ Use a persistent JSON state file with at least:
 ### Idempotency rule
 
 Track **per-session processed_message_count** and advance it only after diary + run payload + candidate batch are written successfully.
+
+Important nuance:
+- advance processed counts for any session whose new raw messages were reviewed, even if filtering strips all of them from the staged corpus
+- otherwise meta-only sessions (for example auto skill-review boilerplate) will be reprocessed forever on every dream run
 
 This is simpler and safer than trying to hash every message first.
 
@@ -183,8 +171,11 @@ This keeps the nightly corpus readable while still reflecting the real conversat
 
 Additional diary hygiene rules:
 - collapse injected skill wrappers and cron delivery wrappers into short placeholders instead of dumping huge system payloads into the diary
+- strip auto-generated end-of-session skill-review prompts (for example, "Review the conversation above and consider saving or updating a skill...") and their direct assistant replies; they are bookkeeping scaffolding, not substantive work
+- support array-format message content when detecting those prompts; some providers store `content` as structured blocks rather than plain strings
+- skip platform=`cron` sessions entirely to avoid recursive self-review of dream/other scheduled jobs unless you intentionally redesign the workflow for cron-on-cron analysis
 - prefer salient repo/path labels only; drop garbage path fragments and generic labels so the grouped index stays readable
-- if the diary starts showing malformed path labels or prompt-wrapper noise, patch the script immediately instead of accepting degraded diary quality
+- if the diary starts showing malformed path labels, prompt-wrapper noise, or meta skill-review chatter, patch the script immediately instead of accepting degraded diary quality
 
 ## Diary behavior
 
@@ -353,6 +344,65 @@ A practical progression is:
 
 Do not jump straight to aggressive autonomous writing.
 
+## Packaging and portability
+
+Do not assume this workflow is portable by copying only `SKILL.md` files. In practice the reusable unit is a **dream skill pack** that includes:
+
+- `skills/software-development/nightly-dream-safe-mode/SKILL.md`
+- `skills/software-development/memory-capture-layering/SKILL.md`
+- `scripts/dream.py`
+- `config-templates/dream.config.json`
+- `state-templates/dream.state.json`
+- optional `README.md` + `manifest.json`
+- optional installer entrypoints such as `install.py` and `install.sh`
+
+### Why the pack matters
+
+The Dream workflow depends on both:
+1. procedural guidance in the skill files, and
+2. concrete runtime bookkeeping in `dream.py` plus bootstrap config/state files.
+
+Without the script and templates, another agent does not inherit:
+- incremental session scanning
+- diary writing
+- candidate-batch creation
+- per-session processed-count state tracking
+- explicit `safe` / `real` mode control
+- diary hygiene filtering
+
+### Recommended export strategy
+
+For reuse across agents, keep a canonical folder or git repo with a layout like:
+
+```text
+<dream-skill-pack>/
+  skills/
+    software-development/
+      nightly-dream-safe-mode/
+        SKILL.md
+      memory-capture-layering/
+        SKILL.md
+  scripts/
+    dream.py
+  config-templates/
+    dream.config.json
+  state-templates/
+    dream.state.json
+  install.py
+  install.sh
+  manifest.json
+  README.md
+```
+
+### Reuse rules
+
+- **Another Hermes agent:** prefer shipping a small installer with the pack. A one-command install should copy both skills into `<HERMES_HOME>/skills/software-development/`, copy `scripts/dream.py` into `<HERMES_HOME>/scripts/dream.py`, and bootstrap `<HERMES_HOME>/dream/config.json` + `state.json` from templates. `skills.external_dirs` can still be used for the skill files, but it does not remove the need to sync the script and runtime files.
+- **Non-Hermes agent:** treat the `SKILL.md` files as playbooks/prompts and port `dream.py` logic into that agent's own session store, scheduler, memory tools, and filesystem layout.
+- **Current runtime:** exporting the pack does not require changing the active Hermes runtime if the local instance already uses local skills + local `dream.py`; the pack can remain a distribution/source-of-truth artifact until you explicitly switch to a shared-source workflow.
+- **Live-vs-pack drift check:** before reviewing, committing, or pushing dream-pack changes, compare the repo copy (`scripts/dream.py`) against the live runtime copy (`~/.hermes/scripts/dream.py`) if both exist. The live script may contain urgent operational fixes not yet synced back into the export pack.
+- **Git sync rule:** if the dream-pack repo has a remote, fetch/pull first. Do not assume the local checkout is current; otherwise you may review the wrong version, miss upstream changes, or push on top of stale state.
+- **Source-of-truth packaging:** once the pack exists, it is worth turning it into a git repo with `.gitignore` and an initial commit so it can be versioned and pushed independently from the current live Hermes home.
+
 ## Verification
 
 After implementation:
@@ -363,6 +413,7 @@ After implementation:
 4. Confirm it reports zero new content
 5. Verify the cron job is scheduled for `0 1 * * *`
 6. Inspect the first nightly report for proposal quality
+7. If exporting to another agent, verify that the target has both the skills and `dream.py`, not just copied `SKILL.md` files
 
 ## Remember
 
